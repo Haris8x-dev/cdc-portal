@@ -1,17 +1,17 @@
 import StudentPortal from '../../models/studentPortal/studentPortal.js';
+import User from '../../models/userModel.js';
 
 /**
  * @desc    Get Full Student Profile (All sections combined)
  * @route   GET /api/student-portal/profile/:userId
- * @access  Private
  */
 export const getFullStudentProfile = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        // Fetch the portal document and chain .populate() for every reference
+        // Populate everything linked to this user
         const profile = await StudentPortal.findOne({ user: userId })
-            .populate('user', 'name email') // Only get name/email from User model
+            .populate('user', 'name email')
             .populate('personalInfo')
             .populate('education')
             .populate('experience')
@@ -19,42 +19,43 @@ export const getFullStudentProfile = async (req, res) => {
             .populate('projects');
 
         if (!profile) {
-            return res.status(404).json({ 
-                message: "Student portal profile not found for this user." 
-            });
+            return res.status(404).json({ message: "Student portal profile not found." });
         }
 
-        res.status(200).json({
-            success: true,
-            data: profile
-        });
+        res.status(200).json({ success: true, data: profile });
     } catch (error) {
-        console.error("Portal Fetch Error:", error.message);
         res.status(500).json({ message: "Server error while fetching complete profile" });
     }
 };
 
 /**
- * @desc    Initial Setup: Link existing section IDs to a User Portal
+ * @desc    Initialize or Update Portal Links
  * @route   POST /api/student-portal/initialize
- * @access  Private
  */
 export const initializeStudentPortal = async (req, res) => {
     try {
-        const { user, personalInfo, education, experience, skills, projects } = req.body;
+        const { userId, personalInfo, education, experience, skills, projects } = req.body;
 
-        const newPortal = await StudentPortal.create({
-            user,
-            personalInfo,
-            education,
-            experience,
-            skills,
-            projects
-        });
+        // Verify User
+        const userExists = await User.findById(userId);
+        if (!userExists) return res.status(404).json({ message: "User not found" });
 
-        res.status(201).json({
-            message: "Student Portal initialized and linked successfully",
-            data: newPortal
+        // Upsert the Master Portal document
+        const portal = await StudentPortal.findOneAndUpdate(
+            { user: userId },
+            { 
+                personalInfo, 
+                education, 
+                experience, 
+                skills, 
+                projects 
+            },
+            { upsert: true, new: true }
+        );
+
+        res.status(200).json({
+            message: "Student Portal links synchronized successfully",
+            data: portal
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

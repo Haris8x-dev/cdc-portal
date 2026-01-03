@@ -25,6 +25,12 @@ const experienceEntrySchema = new mongoose.Schema({
 
 const experienceSchema = new mongoose.Schema({
     // This allows for the "Add another Experience" functionality
+        user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        unique: true // Ensures one user only has one education document
+    },
     experienceList: [experienceEntrySchema]
 }, {
     timestamps: true

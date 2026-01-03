@@ -25,6 +25,12 @@ const educationEntrySchema = new mongoose.Schema({
 
 const educationSchema = new mongoose.Schema({
     // This array allows the user to submit multiple education blocks at once
+    user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true // Ensures one user only has one education document
+},
     educationList: [educationEntrySchema] 
 }, {
     timestamps: true

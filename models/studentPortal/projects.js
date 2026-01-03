@@ -25,6 +25,12 @@ const projectEntrySchema = new mongoose.Schema({
 
 const projectsSchema = new mongoose.Schema({
     // This array allows the user to add multiple projects
+        user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        unique: true // Ensures one user only has one education document
+    },
     projectList: [projectEntrySchema]
 }, {
     timestamps: true

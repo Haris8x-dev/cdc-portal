@@ -1,6 +1,12 @@
 import mongoose from 'mongoose';
 
 const personalInfoSchema = new mongoose.Schema({
+        user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        unique: true // Ensures one user only has one education document
+    },
     fullName: {
         type: String,
         required: [true, "Full name is required"],
@@ -9,7 +15,6 @@ const personalInfoSchema = new mongoose.Schema({
     email: {
         type: String,
         required: [true, "Email is required"],
-        unique: true,
         trim: true,
         lowercase: true
     },

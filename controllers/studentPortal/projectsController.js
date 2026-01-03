@@ -1,34 +1,56 @@
 import Projects from '../../models/studentPortal/projects.js';
+import User from '../../models/userModel.js';
 
 /**
- * @desc    Save or Update Projects List
+ * @desc    Save or Update Projects List (Sync/Replace Logic)
  * @route   POST /api/student-portal/projects
  * @access  Private
  */
 export const saveProjects = async (req, res) => {
     try {
-        const { projectList } = req.body;
+        const { userId, projectList } = req.body;
 
-        // 1. Validation: Ensure projectList is an array and not empty
-        if (!projectList || !Array.isArray(projectList) || projectList.length === 0) {
-            return res.status(400).json({ message: "Project list is required and must be an array" });
+        // 1. Basic ID Validation
+        if (!userId) {
+            return res.status(400).json({ message: "User ID is required" });
         }
 
-        // 2. Validate individual fields within each project entry
+        // 2. Database User Verification
+        const userExists = await User.findById(userId);
+        if (!userExists) {
+            return res.status(404).json({ message: "Couldn't find user. Access denied." });
+        }
+
+        // 3. Validation: Ensure projectList is an array
+        // We allow an empty array [] in case the user deletes all projects
+        if (!projectList || !Array.isArray(projectList)) {
+            return res.status(400).json({ message: "Project list must be an array" });
+        }
+
+        // 4. Validate individual project fields for non-empty entries
         for (const project of projectList) {
             if (!project.projectName || !project.technologiesUsed || !project.projectLink || !project.description) {
                 return res.status(400).json({ 
-                    message: "Each project must have a name, technologies, link, and description" 
+                    message: "Each project entry must have a name, technologies, link, and description" 
                 });
             }
         }
 
-        // 3. Save the data
-        const newProjects = await Projects.create({ projectList });
+        // 5. Sync Logic (Upsert)
+        // Find by user foreign key and replace the projectList array entirely
+        const updatedProjects = await Projects.findOneAndUpdate(
+            { user: userId },
+            { projectList },
+            { 
+                upsert: true, 
+                new: true, 
+                runValidators: true 
+            }
+        );
 
-        res.status(201).json({
-            message: "Projects saved successfully",
-            data: newProjects
+        res.status(200).json({
+            message: "Projects synchronized successfully",
+            data: updatedProjects
         });
 
     } catch (error) {
@@ -38,16 +60,17 @@ export const saveProjects = async (req, res) => {
 };
 
 /**
- * @desc    Get Projects List by ID
- * @route   GET /api/student-portal/projects/:id
+ * @desc    Get Projects by User ID
+ * @route   GET /api/student-portal/projects/:userId
  * @access  Private
  */
 export const getProjects = async (req, res) => {
     try {
-        const projects = await Projects.findById(req.params.id);
+        // Query by the 'user' field (Foreign Key)
+        const projects = await Projects.findOne({ user: req.params.userId });
         
         if (!projects) {
-            return res.status(404).json({ message: "Projects record not found" });
+            return res.status(404).json({ message: "No projects found for this user" });
         }
 
         res.status(200).json(projects);

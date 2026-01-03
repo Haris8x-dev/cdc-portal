@@ -1,27 +1,25 @@
 import PersonalInfo from '../../models/studentPortal/personalInfo.js';
+import User from '../../models/userModel.js';
 
 /**
- * @desc    Create or Update Personal Information
+ * @desc    Create or Update Personal Information based on User ID
  * @route   POST /api/student-portal/personal-info
- * @access  Private (Assuming user is logged in)
+ * @access  Private
  */
 export const savePersonalInfo = async (req, res) => {
     try {
-        const {
-            fullName,
-            email,
-            phone,
-            gender,
-            dateOfBirth,
-            city,
-            address,
-            linkedinProfile,
-            portfolioWebsite,
-            professional,
-            bio
-        } = req.body;
+        const { userId } = req.body;
 
-        // 1. Validation for all required fields
+        // 1. Force MongoDB to drop old indexes that are no longer in the schema
+        await PersonalInfo.syncIndexes(); 
+
+        // 2. Database User Verification
+        const userExists = await User.findById(userId);
+        if (!userExists) {
+            return res.status(404).json({ message: "Couldn't find user. Access denied." });
+        }
+
+        // 3. Validation
         const requiredFields = [
             'fullName', 'email', 'phone', 'gender', 'dateOfBirth', 
             'city', 'address', 'linkedinProfile', 'portfolioWebsite', 
@@ -34,60 +32,48 @@ export const savePersonalInfo = async (req, res) => {
             }
         }
 
-        // 2. Check if info already exists for this email to perform an update
-        // (Or use user ID if you decide to link it later)
-        let info = await PersonalInfo.findOne({ email });
+        // 4. UPSERT Logic
+        const updatedInfo = await PersonalInfo.findOneAndUpdate(
+            { user: userId }, 
+            { $set: req.body },
+            { 
+                upsert: true, 
+                new: true, 
+                runValidators: true 
+            }
+        );
 
-        if (info) {
-            // Update existing record
-            info = await PersonalInfo.findOneAndUpdate(
-                { email },
-                { $set: req.body },
-                { new: true, runValidators: true }
-            );
-            return res.status(200).json({
-                message: "Personal information updated successfully",
-                data: info
-            });
-        }
-
-        // 3. Create new record if it doesn't exist
-        const newPersonalInfo = await PersonalInfo.create({
-            fullName,
-            email,
-            phone,
-            gender,
-            dateOfBirth,
-            city,
-            address,
-            linkedinProfile,
-            portfolioWebsite,
-            professional,
-            bio
-        });
-
-        res.status(201).json({
-            message: "Personal information saved successfully",
-            data: newPersonalInfo
+        res.status(200).json({
+            message: "Personal information synchronized successfully",
+            data: updatedInfo
         });
 
     } catch (error) {
         console.error("Personal Info Error:", error.message);
-        res.status(500).json({ message: error.message || "Server error while saving personal info" });
+        
+        // Specific handling for the index error if syncIndexes didn't catch it fast enough
+        if (error.code === 11000) {
+            return res.status(400).json({ 
+                message: "Database index conflict. Please try clicking save again; the system is clearing old email constraints." 
+            });
+        }
+        
+        res.status(500).json({ message: error.message || "Server error" });
     }
 };
 
 /**
- * @desc    Get Personal Information by Email
- * @route   GET /api/student-portal/personal-info/:email
+ * @desc    Get Personal Information by User ID
+ * @route   GET /api/student-portal/personal-info/:userId
  * @access  Private
  */
 export const getPersonalInfo = async (req, res) => {
     try {
-        const info = await PersonalInfo.findOne({ email: req.params.email });
+        // Querying by 'user' foreign key instead of email
+        const info = await PersonalInfo.findOne({ user: req.params.userId });
         
         if (!info) {
-            return res.status(404).json({ message: "Personal information not found" });
+            return res.status(404).json({ message: "Personal information not found for this user" });
         }
 
         res.status(200).json(info);

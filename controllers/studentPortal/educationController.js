@@ -1,20 +1,31 @@
 import Education from '../../models/studentPortal/education.js';
+import User from '../../models/userModel.js'; // Import your User model
 
 /**
- * @desc    Save or Update Education History
+ * @desc    Save or Update Education History with User Verification
  * @route   POST /api/student-portal/education
  * @access  Private
  */
 export const saveEducation = async (req, res) => {
     try {
-        const { educationList } = req.body;
+        const { userId, educationList } = req.body;
 
-        // 1. Validation: Ensure educationList is an array and not empty
+        // 1. Basic ID Validation
+        if (!userId) {
+            return res.status(400).json({ message: "User ID is required" });
+        }
+
+        // 2. Database User Verification
+        const userExists = await User.findById(userId);
+        if (!userExists) {
+            return res.status(404).json({ message: "Couldn't find user. Access denied." });
+        }
+
+        // 3. Education List Validation
         if (!educationList || !Array.isArray(educationList) || educationList.length === 0) {
             return res.status(400).json({ message: "Education list is required and must be an array" });
         }
 
-        // 2. Validate individual fields within each entry
         for (const entry of educationList) {
             if (!entry.degreeProgram || !entry.institution || !entry.yearOfCompletion || !entry.cgpa) {
                 return res.status(400).json({ 
@@ -23,13 +34,20 @@ export const saveEducation = async (req, res) => {
             }
         }
 
-        // 3. Save the data
-        // Note: Currently standalone. If linking to a user later, you'd check for an existing ID here.
-        const newEducation = await Education.create({ educationList });
+        // 4. Synchronize Data (Upsert)
+        const updatedEducation = await Education.findOneAndUpdate(
+            { user: userId },
+            { educationList },
+            { 
+                upsert: true, 
+                new: true, 
+                runValidators: true 
+            }
+        );
 
-        res.status(201).json({
-            message: "Education history saved successfully",
-            data: newEducation
+        res.status(200).json({
+            message: "Education history synchronized successfully",
+            data: updatedEducation
         });
 
     } catch (error) {
@@ -39,16 +57,15 @@ export const saveEducation = async (req, res) => {
 };
 
 /**
- * @desc    Get Education History by ID
- * @route   GET /api/student-portal/education/:id
- * @access  Private
+ * @desc    Get Education History by User ID
+ * @route   GET /api/student-portal/education/:userId
  */
 export const getEducation = async (req, res) => {
     try {
-        const education = await Education.findById(req.params.id);
+        const education = await Education.findOne({ user: req.params.userId });
         
         if (!education) {
-            return res.status(404).json({ message: "Education history not found" });
+            return res.status(404).json({ message: "No education history found for this user" });
         }
 
         res.status(200).json(education);
